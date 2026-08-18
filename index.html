@@ -1,0 +1,917 @@
+<!DOCTYPE html>
+<html lang="vi" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TV Box Pro - Truyền hình Việt Nam</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- HLS.js for streaming .m3u8 -->
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        google: {
+                            blue: '#4285F4',
+                            red: '#EA4335',
+                            yellow: '#FBBC05',
+                            green: '#34A853',
+                            dark: '#121212',
+                            card: '#1E1E1E',
+                            surface: '#2D2D2D'
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+        body {
+            font-family: 'Inter', sans-serif;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+        .tv-card-focus {
+            transform: scale(1.05);
+            box-shadow: 0 0 0 4px #4285F4, 0 20px 25px -5px rgba(0, 0, 0, 0.5);
+            border-color: rgba(255, 255, 255, 0.4) !important;
+            z-index: 10;
+        }
+        /* Custom Scrollbar for Leanback UI */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #121212;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #333333;
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #555555;
+        }
+        .osd-overlay {
+            transition: opacity 0.3s ease-in-out;
+        }
+    </style>
+</head>
+<body class="bg-[#0f1014] text-white h-screen overflow-hidden flex flex-col relative">
+    <!-- Ambient Background Glow -->
+    <div class="absolute top-0 left-0 w-[800px] h-[600px] bg-google-blue/10 rounded-full blur-[120px] -translate-x-1/2 -translate-y-1/2 pointer-events-none z-0"></div>
+
+    <!-- Top Header bar -->
+    <header class="h-16 md:h-24 px-4 md:px-10 flex items-center justify-between bg-transparent shrink-0 z-30 pt-4 relative">
+        <div class="flex items-center gap-4 md:gap-12">
+            <div class="flex items-center gap-3">
+                <div class="w-8 h-8 md:w-10 md:h-10 rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-600 flex items-center justify-center text-white shadow-lg shadow-blue-500/20">
+                    <i class="fa-solid fa-tv text-sm md:text-lg"></i>
+                </div>
+                <div class="flex flex-col">
+                    <span class="font-black text-lg md:text-xl tracking-wider text-white leading-none">TV BOX <span class="text-blue-400 font-extrabold text-[10px] md:text-xs bg-blue-500/20 px-2 py-0.5 rounded-md ml-1 border border-blue-500/30">PRO</span></span>
+                    <span class="text-[8px] md:text-[10px] text-gray-400 font-medium tracking-widest uppercase mt-0.5">Cong Ly Smart TV</span>
+                </div>
+            </div>
+            <nav class="hidden md:flex items-center gap-8 text-[15px] font-medium text-gray-400">
+                <a href="#" class="text-white border-b-2 border-white pb-1">Trực tiếp</a>
+            </nav>
+        </div>
+        <div class="flex items-center gap-2 md:gap-6">
+            <div id="clock" class="hidden md:block text-[15px] font-bold text-gray-200 tracking-wide bg-[#1e1e1e]/80 backdrop-blur-md px-4 py-2 rounded-full border border-white/10 shadow-inner">00:00</div>
+            <div class="flex items-center gap-2 bg-[#1e1e1e] px-3 py-1.5 md:px-4 md:py-2 rounded-full border border-white/10 shadow-inner">
+                <i class="fa-solid fa-tv text-gray-400 text-xs"></i>
+                <span class="text-xs md:text-sm text-gray-300 font-semibold"><span id="total-channels-count">0</span> Kênh</span>
+            </div>
+            <div class="w-8 h-8 md:w-10 md:h-10 rounded-full bg-gradient-to-tr from-blue-500 to-purple-500 flex items-center justify-center text-white text-sm md:text-base font-bold shadow-lg border-2 border-[#121212]">
+                U
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content Area -->
+    <main class="flex-1 relative overflow-hidden flex flex-col">
+        
+        <!-- Unified Channels Grid View -->
+        <div id="grid-view" class="absolute inset-0 px-4 md:px-10 pt-4 pb-8 overflow-y-auto flex flex-col z-10">
+            <div class="mb-6 md:mb-8 flex flex-col md:flex-row md:items-center justify-between mt-2 md:mt-4 gap-4">
+                <div>
+                    <h1 class="text-2xl md:text-3xl font-medium tracking-tight">Kênh truyền hình của bạn</h1>
+                    <p class="text-xs md:text-sm text-gray-400 mt-1 md:mt-2">Chạm, cuộn hoặc dùng phím để duyệt kênh. Click để xem.</p>
+                </div>
+                <div class="relative w-full md:w-80">
+                    <input type="text" id="search-input" placeholder="Tìm kiếm kênh..." oninput="filterChannels(this.value)" class="w-full bg-[#1e1e1e]/80 backdrop-blur-sm border border-white/10 rounded-full px-5 py-3 text-sm focus:outline-none focus:border-white/30 focus:bg-[#2a2a2a] transition text-white placeholder-gray-500 shadow-inner">
+                    <i class="fa-solid fa-search absolute right-5 top-3.5 text-gray-400"></i>
+                </div>
+            </div>
+
+            <!-- Channels Container Grid -->
+            <div id="channels-grid" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-5 pb-12">
+                <!-- Dynamic Loaded Channels -->
+                <div class="col-span-full text-center py-20 text-gray-400">
+                    <i class="fa-solid fa-circle-notch fa-spin text-3xl text-blue-500 mb-3"></i>
+                    <p>Đang tải danh sách kênh truyền hình...</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Fullscreen Player View -->
+        <div id="player-view" class="fixed inset-0 bg-black hidden flex flex-col z-50">
+            <!-- Video Element -->
+            <div class="relative w-full h-full flex items-center justify-center" onclick="handlePlayerClick(event)">
+                <video id="video-player" class="w-full h-full object-contain" autoplay playsinline webkit-playsinline x-webkit-airplay="allow" airplay="allow"></video>
+                
+                <!-- AirPlay Active YouTube-Style Screen Overlay -->
+                <div id="airplay-overlay" class="absolute inset-0 bg-[#0f1014]/95 backdrop-blur-2xl flex flex-col items-center justify-center text-center p-6 z-40 hidden transition-all duration-300 pointer-events-auto" onclick="event.stopPropagation()">
+                    <div class="relative mb-6">
+                        <div class="w-24 h-24 md:w-32 md:h-32 rounded-full bg-blue-500/10 border border-blue-500/30 flex items-center justify-center shadow-2xl animate-pulse">
+                            <i class="fa-solid fa-tv text-4xl md:text-6xl text-blue-400"></i>
+                        </div>
+                        <div class="absolute -bottom-1 -right-1 w-8 h-8 rounded-full bg-green-500 border-2 border-black flex items-center justify-center text-black text-xs font-bold shadow-lg">
+                            <i class="fa-solid fa-check"></i>
+                        </div>
+                    </div>
+                    
+                    <span class="text-[11px] font-bold uppercase tracking-widest text-blue-400 mb-2 px-3.5 py-1 rounded-full bg-blue-500/10 border border-blue-500/20">Đã kết nối AirPlay</span>
+                    <h2 id="airplay-channel-name" class="text-2xl md:text-4xl font-extrabold text-white tracking-tight mb-2">---</h2>
+                    <p class="text-gray-400 text-xs md:text-sm max-w-sm mb-8 leading-relaxed">
+                        Video đang được phát trực tiếp trên màn hình TV của bạn. Bạn có thể sử dụng điện thoại để chuyển kênh hoặc điều khiển.
+                    </p>
+
+                    <div class="flex items-center gap-3 flex-wrap justify-center">
+                        <button onclick="triggerFullscreen()" class="px-5 py-2.5 bg-blue-600 hover:bg-blue-500 text-white rounded-full text-xs md:text-sm font-semibold transition flex items-center gap-2 shadow-lg shadow-blue-600/30 active:scale-95">
+                            <i class="fa-solid fa-expand"></i> Toàn màn hình TV
+                        </button>
+                        <button onclick="triggerAirPlay()" class="px-5 py-2.5 bg-white/10 hover:bg-white/20 text-white rounded-full text-xs md:text-sm font-semibold border border-white/20 transition flex items-center gap-2 shadow-lg active:scale-95">
+                            <i class="fa-solid fa-sliders"></i> Cài đặt AirPlay
+                        </button>
+                        <button onclick="toggleVerticalMenu()" class="px-5 py-2.5 bg-white/10 hover:bg-white/20 text-white rounded-full text-xs md:text-sm font-semibold border border-white/20 transition flex items-center gap-2 shadow-lg active:scale-95">
+                            <i class="fa-solid fa-bars"></i> Danh sách kênh
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Loading Spinner Overlay -->
+                <div id="video-loading" class="absolute inset-0 bg-black/60 backdrop-blur-sm flex flex-col items-center justify-center gap-3 text-white transition opacity-0 pointer-events-none">
+                    <i class="fa-solid fa-circle-notch fa-spin text-4xl text-google-blue"></i>
+                    <span id="loading-text" class="text-sm font-medium tracking-wide">Đang kết nối luồng phát...</span>
+                </div>
+
+                <!-- Fallback Notification Toast -->
+                <div id="fallback-toast" class="absolute top-6 left-1/2 -translate-x-1/2 bg-yellow-500/90 text-black px-4 py-2 rounded-xl text-xs font-bold shadow-lg hidden flex items-center gap-2 z-30">
+                    <i class="fa-solid fa-triangle-exclamation"></i> Kênh chính lỗi kết nối, đang phát luồng dự phòng...
+                </div>
+
+                <!-- Vertical Menu Overlay (Google TV Style Sidebar) -->
+                <div id="vertical-menu" class="absolute top-0 bottom-0 right-0 w-[85%] md:w-[340px] bg-[#121212]/95 backdrop-blur-2xl border-l border-white/10 transform translate-x-full transition-transform duration-300 z-50 flex flex-col shadow-2xl pointer-events-auto" onclick="event.stopPropagation()">
+                    <div class="p-6 pt-10 flex items-center justify-between shrink-0">
+                        <h3 class="text-xl font-medium text-white flex items-center gap-2 tracking-tight">
+                            Tất cả kênh
+                        </h3>
+                        <button onclick="toggleVerticalMenu()" class="w-10 h-10 rounded-full hover:bg-white/10 flex items-center justify-center text-gray-400 hover:text-white transition">
+                            <i class="fa-solid fa-xmark text-lg"></i>
+                        </button>
+                    </div>
+                    <div class="px-6 pb-4 shrink-0">
+                        <div class="relative w-full">
+                            <input type="text" id="vertical-search" placeholder="Tìm nhanh..." oninput="filterVerticalChannels(this.value)" class="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-white/30 transition text-white placeholder-gray-500">
+                            <i class="fa-solid fa-search absolute right-4 top-3.5 text-gray-400 text-sm"></i>
+                        </div>
+                    </div>
+                    <div class="flex-1 overflow-y-auto px-4 pb-6 flex flex-col gap-1.5" id="vertical-menu-list">
+                        <!-- Dynamic items -->
+                    </div>
+                </div>
+
+                <!-- 3-Channel Surfing OSD Overlay -->
+                                    <!-- Back Button for Mobile -->
+            <button onclick="closePlayer()" class="absolute top-4 left-4 md:top-6 md:left-6 z-50 w-10 h-10 md:w-12 md:h-12 bg-black/50 text-white rounded-full flex items-center justify-center backdrop-blur-md border border-white/10 shadow-lg hover:bg-black/70 pointer-events-auto transition">
+                <i class="fa-solid fa-arrow-left"></i>
+            </button>
+                <div id="osd" class="osd-overlay absolute bottom-0 left-0 w-full p-4 md:p-10 flex flex-col justify-end z-20 opacity-0 pointer-events-none transition-opacity duration-300" onclick="event.stopPropagation()">
+
+                    <div class="max-w-5xl mx-auto w-full bg-[#1e1e1e]/90 backdrop-blur-xl border border-white/10 p-4 md:p-6 rounded-2xl md:rounded-3xl shadow-2xl flex items-center justify-between">
+
+                        <!-- Previous Channel Preview -->
+                        <div class="hidden md:flex items-center gap-3 text-gray-400 text-sm max-w-[28%] truncate">
+                            <i class="fa-solid fa-chevron-left text-xs"></i>
+                            <div id="osd-prev-logo-container" class="w-12 h-12 bg-white/5 rounded-xl flex items-center justify-center overflow-hidden shrink-0">
+                                <!-- Logo Kênh trước -->
+                            </div>
+                            <div class="truncate">
+                                <div class="text-[10px] uppercase text-gray-500 font-semibold tracking-wider">Kênh trước</div>
+                                <span id="osd-prev" class="font-bold text-white truncate block text-sm">---</span>
+                            </div>
+                        </div>
+
+                        <!-- Current Active Channel -->
+                        <div class="text-center px-2 md:px-4 flex-1 flex flex-col items-center">
+                            <!-- ĐÃ FIX: Xóa pointer-events-auto ở thẻ div này -->
+                            <div class="flex items-center justify-center flex-wrap gap-2 md:gap-3 mb-2">
+                                <button onclick="toggleVerticalMenu()" class="bg-white/10 hover:bg-white/20 text-white px-3 md:px-4 py-1.5 rounded-full text-xs font-semibold backdrop-blur-md border border-white/10 transition flex items-center gap-2 shadow-lg">
+                                    <i class="fa-solid fa-bars"></i> Menu
+                                </button>
+                                <button id="fullscreen-btn" onclick="triggerFullscreen()" class="bg-blue-600 hover:bg-blue-500 text-white px-3 md:px-4 py-1.5 rounded-full text-xs font-semibold backdrop-blur-md border border-blue-500/30 transition flex items-center gap-2 shadow-lg active:scale-95">
+                                    <i class="fa-solid fa-expand"></i> Fullscreen HDMI/TV
+                                </button>
+                                <button id="airplay-btn" onclick="triggerAirPlay()" class="hidden bg-white/10 hover:bg-white/20 text-white px-3 md:px-4 py-1.5 rounded-full text-xs font-semibold backdrop-blur-md border border-white/10 transition flex items-center gap-2 shadow-lg">
+                                    <i class="fa-solid fa-tv"></i> AirPlay
+                                </button>
+                                <button id="pip-btn" onclick="triggerPiP()" class="hidden bg-white/10 hover:bg-white/20 text-white px-3 md:px-4 py-1.5 rounded-full text-xs font-semibold backdrop-blur-md border border-white/10 transition flex items-center gap-2 shadow-lg">
+                                    <i class="fa-solid fa-clone"></i> PiP
+                                </button>
+                                <div class="inline-flex items-center gap-1.5 bg-red-600 text-white text-[10px] font-extrabold px-2.5 py-1 rounded-full shadow-lg animate-pulse tracking-wide shrink-0">
+                                    <i class="fa-solid fa-circle text-[6px]"></i> TRỰC TIẾP
+                                </div>
+                            </div>
+                            <div class="flex items-center gap-2 md:gap-3 justify-center">
+                                <div id="osd-current-logo-container" class="w-10 h-10 md:w-14 md:h-14 bg-white/10 rounded-xl md:rounded-2xl flex items-center justify-center overflow-hidden shadow-md shrink-0 border border-white/10">
+                                    <!-- Logo Kênh hiện tại -->
+                                </div>
+                                <h2 id="osd-channel-name" class="text-xl md:text-3xl font-bold text-white tracking-tight truncate drop-shadow-md">---</h2>
+                            </div>
+                            <p class="text-[10px] md:text-xs text-gray-400 mt-2 hidden md:block">Lăn chuột hoặc dùng phím Lên/Xuống để đổi kênh | M để mở Menu | ESC để thoát</p>
+                            <p class="text-[10px] text-gray-400 mt-2 md:hidden">Vuốt Trái/Phải để chuyển kênh | Bấm "Fullscreen HDMI/TV" để phát tràn màn hình TV</p>
+                        </div>
+
+                        <!-- Next Channel Preview -->
+                        <div class="hidden md:flex items-center justify-end gap-3 text-gray-400 text-sm max-w-[28%] truncate text-right">
+                            <div class="truncate text-right">
+                                <div class="text-[10px] uppercase text-gray-500 font-semibold tracking-wider">Kênh tiếp theo</div>
+                                <span id="osd-next" class="font-bold text-white truncate block text-sm">---</span>
+                            </div>
+                            <div id="osd-next-logo-container" class="w-12 h-12 bg-white/5 rounded-xl flex items-center justify-center overflow-hidden shrink-0">
+                                <!-- Logo Kênh tiếp theo -->
+                            </div>
+                            <i class="fa-solid fa-chevron-right text-xs"></i>
+                        </div>
+
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </main>
+
+    <!-- JavaScript Application Logic -->
+    <script>
+        const PRESET_VN_CHANNELS = [
+            { name: 'VTV1 HD', logoImg: 'https://upload.wikimedia.org/wikipedia/commons/f/fc/Logo_VTV1_HD.png?utm_source=vi.wikipedia.org&utm_campaign=index&utm_content=original', url: 'https://live-a.fptplay53.net/live/media/vtv1/live247-hls-avc/index.m3u8', fallbackUrl: 'https://liveh12.vtvprime.vn/hls/VTV1/index.m3u8' },
+            { name: 'VTV2 HD', logoImg: 'https://static.wikia.nocookie.net/logos/images/4/4c/VTV2_HD_2015-2022.png/revision/latest?cb=20221211020520&path-prefix=vi', url: 'https://live-a.fptplay53.net/live/media/vtv2/live247-hls-avc/index.m3u8', fallbackUrl: 'https://liveh12.vtvprime.vn/hls/VTV2/index.m3u8' },
+            { name: 'VTV3 HD', logoImg: 'https://static.wikia.nocookie.net/logos/images/e/eb/VTV3_HD_b%E1%BA%A3n_2.png/revision/latest?cb=20250110094742&path-prefix=vi', url: 'https://live-a.fptplay53.net/live/media/vtv3/live247-hls-avc/index.m3u8', fallbackUrl: 'https://liveh12.vtvprime.vn/hls/VTV3/index.m3u8' },
+            { name: 'VTV4 HD', logoImg: 'https://static.wikia.nocookie.net/logos/images/6/64/VTV4_HD_logo_2015-2022.png/revision/latest/scale-to-width-down/1200?cb=20221211060858&path-prefix=vi', url: 'https://live-a.fptplay53.net/live/media/vtv4/live247-hls-avc/index.m3u8', fallbackUrl: 'https://liveh12.vtvprime.vn/hls/VTV4/index.m3u8' },
+            { name: 'VTV5 HD', logoImg: 'https://static.wikia.nocookie.net/logos/images/5/59/VTV5_HD_logo_01.07-31.12.2016.png/revision/latest?cb=20230507074015&path-prefix=vi', url: 'https://live-a.fptplay53.net/live/media/vtv5/live247-hls-avc/index.m3u8', fallbackUrl: 'https://liveh12.vtvprime.vn/hls/VTV5/index.m3u8' },
+            { name: 'VTV7 HD', logoImg: 'https://static.wikia.nocookie.net/logos/images/6/6a/VTV7_HD_logo_2015-2022.png/revision/latest/scale-to-width-down/1200?cb=20221211060906&path-prefix=vi', url: 'https://live-a.fptplay53.net/live/media/vtv7/live247-hls-avc/index.m3u8', fallbackUrl: 'https://liveh12.vtvprime.vn/hls/VTV7/index.m3u8' },
+            { name: 'VTV8 HD', logoImg: 'https://static.wikia.nocookie.net/logos/images/d/d4/VTV8_HD_logo.png/revision/latest?cb=20211228031302&path-prefix=vi', url: 'https://live-a.fptplay53.net/live/media/vtv8/live247-hls-avc/index.m3u8', fallbackUrl: 'https://liveh12.vtvprime.vn/hls/VTV8/index.m3u8' },
+            { name: 'VTV9 HD', logoImg: 'https://static.wikia.nocookie.net/logos/images/9/92/VTV9_HD_%289%29.png/revision/latest?cb=20221211060917&path-prefix=vi', url: 'https://live-a.fptplay53.net/live/media/vtv9/live247-hls-avc/index.m3u8', fallbackUrl: 'https://liveh12.vtvprime.vn/hls/VTV9/index.m3u8' },
+	    { name: 'VTVCab ON Giải trí', logoImg: 'https://static.wikia.nocookie.net/logos/images/3/32/ON_Vie_Gi%E1%BA%A3i_tr%C3%AD.png/revision/latest?cb=20240817111510&path-prefix=vi', url: 'https://freem3u.xyz/api/live/play.m3u8?vid=180', fallbackUrl: 'https://liveh12.vtvprime.vn/hls/VTV9/index.m3u8' },
+	    { name: 'VTVCab ON Phim Việt', logoImg: 'https://static.wikia.nocookie.net/logos/images/4/41/ON_Phim_Vi%E1%BB%87t_08-09-2021.png/revision/latest/scale-to-width-down/1000?cb=20230606020123&path-prefix=vi', url: 'https://freem3u.xyz/api/live/play.m3u8?vid=175', fallbackUrl: 'https://liveh12.vtvprime.vn/hls/VTV9/index.m3u8' },
+	    { name: 'VTVCab ON Movies', logoImg: 'https://static.wikia.nocookie.net/logos/images/1/19/ON_Movies_logo.png/revision/latest/scale-to-width-down/1000?cb=20221211044023&path-prefix=vi', url: 'https://freem3u.xyz/api/live/play.m3u8?vid=181', fallbackUrl: 'https://liveh12.vtvprime.vn/hls/VTV9/index.m3u8' },
+	    { name: 'VTVCab ON Echannel', logoImg: 'https://static.wikia.nocookie.net/logos/images/f/f9/ON_E_Channel.png/revision/latest/scale-to-width-down/1000?cb=20231122023306&path-prefix=vi', url: 'https://freem3u.xyz/api/live/play.m3u8?vid=182', fallbackUrl: 'https://liveh12.vtvprime.vn/hls/VTV9/index.m3u8' },
+	    { name: 'VTVCab ON Bibi TV', logoImg: 'https://static.wikia.nocookie.net/logos/images/a/a5/ON_BiBi.png/revision/latest/scale-to-width-down/1000?cb=20221211044448&path-prefix=vi', url: 'https://freem3u.xyz/api/live/play.m3u8?vid=178', fallbackUrl: 'https://liveh12.vtvprime.vn/hls/VTV9/index.m3u8' },
+	    { name: 'VTVCab ON Info', logoImg: 'https://static.wikia.nocookie.net/logos/images/c/cd/ON_Info_TV.png/revision/latest?cb=20230228111228&path-prefix=vi', url: 'https://freem3u.xyz/api/live/play.m3u8?vid=189', fallbackUrl: 'https://liveh12.vtvprime.vn/hls/VTV9/index.m3u8' },
+	    { name: 'VTVCab ON Cine', logoImg: 'https://static.wikia.nocookie.net/logos/images/1/18/ON_Cine_logo.png/revision/latest?cb=20210910161929&path-prefix=vi', url: 'https://freem3u.xyz/api/live/play.m3u8?vid=176', fallbackUrl: 'https://liveh12.vtvprime.vn/hls/VTV9/index.m3u8' },
+	    { name: 'VTVCab ON Style', logoImg: 'https://static.wikia.nocookie.net/logos/images/d/d7/ON_Style.png/revision/latest?cb=20230228111231&path-prefix=vi', url: 'https://freem3u.xyz/api/live/play.m3u8?vid=184', fallbackUrl: 'https://liveh12.vtvprime.vn/hls/VTV9/index.m3u8' },
+	    { name: 'VTVCab ON Trending', logoImg: 'https://static.wikia.nocookie.net/logos/images/f/f0/ON_Trending_TV.png/revision/latest/scale-to-width-down/1000?cb=20250401154338&path-prefix=vi', url: 'https://freem3u.xyz/api/live/play.m3u8?vid=186', fallbackUrl: 'https://liveh12.vtvprime.vn/hls/VTV9/index.m3u8' },
+	    { name: 'VTVCab ON Music', logoImg: 'https://static.wikia.nocookie.net/logos/images/4/48/ON_Music_logo.png/revision/latest/scale-to-width-down/1000?cb=20221211044556&path-prefix=vi', url: 'https://freem3u.xyz/api/live/play.m3u8?vid=185', fallbackUrl: 'https://liveh12.vtvprime.vn/hls/VTV9/index.m3u8' },
+	    { name: 'VTVCab ON Dramas', logoImg: 'https://static.wikia.nocookie.net/logos/images/3/30/ON_Vie_Dramas.png/revision/latest?cb=20240816025529&path-prefix=vi', url: 'https://freem3u.xyz/api/live/play.m3u8?vid=177', fallbackUrl: 'https://liveh12.vtvprime.vn/hls/VTV9/index.m3u8' },
+	    { name: 'VTVCab ON VFamily', logoImg: 'https://static.wikia.nocookie.net/logos/images/1/1e/ON_VFamily.png/revision/latest?cb=20230401005950&path-prefix=vi', url: 'https://freem3u.xyz/api/live/play.m3u8?vid=187', fallbackUrl: 'https://liveh12.vtvprime.vn/hls/VTV9/index.m3u8' },
+	    { name: 'VTVCab ON Life', logoImg: 'https://static.wikia.nocookie.net/logos/images/3/37/ON_Life.png/revision/latest/scale-to-width-down/1000?cb=20221211044714&path-prefix=vi', url: 'https://freem3u.xyz/api/live/play.m3u8?vid=188', fallbackUrl: 'https://liveh12.vtvprime.vn/hls/VTV9/index.m3u8' },
+	    { name: 'VTVCab ON Mu', logoImg: 'https://static.wikia.nocookie.net/logos/images/4/48/ON_Music_logo.png/revision/latest/scale-to-width-down/1000?cb=20221211044556&path-prefix=vi', url: 'https://e3.endpoint.cdn.sctvonline.vn/hls/vtvcab6/index.m3u8', fallbackUrl: 'https://liveh12.vtvprime.vn/hls/VTV9/index.m3u8' },
+            { name: 'THVL1 HD', logoImg: 'https://upload.wikimedia.org/wikipedia/commons/2/24/Logo_THVL1_HD.png?utm_source=vi.wikipedia.org&utm_campaign=index&utm_content=original', url: 'https://thvl1-hls.truyenhinhvinhlong.vn/thvl1hd/index.m3u8', fallbackUrl: 'http://125hvt.ddns.net:21585/thvl1/playlist.m3u8' },
+            { name: 'THVL2 HD', logoImg: 'https://static.wikia.nocookie.net/logos/images/0/0a/THVL2_HD_logo.png/revision/latest?cb=20210221010355&path-prefix=vi', url: 'https://live.fptplay53.net/epzhd2/vinhlong2_vhls.smil/chunklist_b5000000.m3u8', fallbackUrl: 'https://1011154949.vnns.net/CDN-FPT02/THVL2-HD-1080p/playlist.m3u8' },
+            { name: 'THVL3 HD', logoImg: 'https://static.wikia.nocookie.net/logos/images/a/a3/THVL3_HD_logo_01-02.02.2019.png/revision/latest?cb=20230420133737&path-prefix=vi', url: 'https://live.fptplay53.net/epzhd2/vinhlong3_vhls.smil/chunklist_b5000000.m3u8', fallbackUrl: 'https://1011154949.vnns.net/CDN-FPT02/THVL2-HD-1080p/playlist.m3u8' },
+	    { name: 'HTV1', logoImg: 'https://blogger.googleusercontent.com/img/b/R29vZ2xl/AVvXsEhWvg8V1VnbPsQHW9FvrPw6usM9iFaq0VGt33idcwxIuAj4_NofLLQrlLJ-zNMt_ZlXRg9nW4l-n54klfvt6DuyAgEpNGsyFMnWbtTQIfgrF6o9WVgv5wBNI4nAilCanaYVS5rc7AyjcJ4/w1200-h630-p-k-no-nu/htv1.png', url: 'https://live.fptplay53.net/epzhd1/htv1_hls.smil/chunklist.m3u8' },
+            { name: 'HTV2', logoImg: 'https://upload.wikimedia.org/wikipedia/commons/c/cd/HTV2_channel_logo.png?utm_source=vi.wikipedia.org&utm_campaign=index&utm_content=original', url: 'https://live.fptplay53.net/epzhd1/htv2hd_vhls.smil/chunklist.m3u8' },
+            { name: 'HTV3', logoImg: 'https://upload.wikimedia.org/wikipedia/commons/e/ef/HTV3-2016.png?utm_source=vi.wikipedia.org&utm_campaign=index&utm_content=original', url: 'https://live.fptplay53.net/epzhd1/htv3_hls.smil/chunklist.m3u8' },
+	    { name: 'HTV4', logoImg: 'https://static.wikia.nocookie.net/logos/images/2/22/HTV4_logo_new.png/revision/latest/scale-to-width-down/1200?cb=20260319134538&path-prefix=vi', url: 'https://live.fptplay53.net/epzhd1/htv4_hls.smil/chunklist.m3u8' },
+	    { name: 'HTV5', logoImg: 'https://upload.wikimedia.org/wikipedia/commons/c/c3/HTV5_Bchannel.png?utm_source=vi.wikipedia.org&utm_campaign=index&utm_content=original', url: 'https://live.fptplay53.net/fnxsd1/btv9_hls.smil/chunklist.m3u8', fallbackUrl: 'https://liveh12.vtvprime.vn/hls/VTV9/index.m3u8' },
+            { name: 'HTV7 HD', logoImg: 'https://upload.wikimedia.org/wikipedia/commons/3/3d/Htv7logo2016.png?utm_source=vi.wikipedia.org&utm_campaign=index&utm_content=original', url: 'https://live.fptplay53.net/epzhd1/htv7hd_vhls.smil/chunklist.m3u8', fallbackUrl: 'https://freem3u.xyz/api/live/play.m3u8?vid=9' },
+            { name: 'HTV9 HD', logoImg: 'https://static.wikia.nocookie.net/logos/images/9/90/HTV9_logo_2010-2015.png/revision/latest/scale-to-width-down/1250?cb=20240524080224&path-prefix=vi', url: 'https://live.fptplay53.net/epzhd1/htv9hd_vhls.smil/chunklist.m3u8', fallbackUrl: 'https://freem3u.xyz/api/live/play.m3u8?vid=10' },
+	    { name: 'HTVC Âm nhạc', logoImg: 'https://upload.wikimedia.org/wikipedia/commons/1/1a/HTVC_Ca_nhac_logo.webp?utm_source=vi.wikipedia.org&utm_campaign=index&utm_content=original', url: 'https://live.fptplay53.net/epzhd1/htvcmusic_vhls.smil/chunklist.m3u8', fallbackUrl: 'https://freem3u.xyz/api/live/play.m3u8?vid=10' },
+	    { name: 'HTVC Du lịch & Cuộc sống', logoImg: 'https://static.wikia.nocookie.net/logos/images/f/f4/HTVC_Du_l%E1%BB%8Bch_v%C3%A0_Cu%E1%BB%99c_s%E1%BB%91ng_b%E1%BA%A3n_2.png/revision/latest?cb=20220329233804&path-prefix=vi', url: 'https://live.fptplay53.net/epzhd1/htvcdulich_vhls.smil/chunklist.m3u8', fallbackUrl: 'https://freem3u.xyz/api/live/play.m3u8?vid=10' },
+	    { name: 'HTVC Gia đình', logoImg: 'https://upload.wikimedia.org/wikipedia/vi/7/7f/LogoHTVCGiaDinh2018.png?utm_source=vi.wikipedia.org&utm_campaign=index&utm_content=original', url: 'https://live.fptplay53.net/epzhd1/htvcgiadinh_vhls.smil/chunklist.m3u8', fallbackUrl: 'https://freem3u.xyz/api/live/play.m3u8?vid=10' },
+	    { name: 'HTVC Phim', logoImg: 'https://static.wikia.nocookie.net/logos/images/d/d6/HTVC_Phim_logo.png/revision/latest?cb=20210629030316&path-prefix=vi', url: 'https://live.fptplay53.net/epzhd1/htvcmovieshd_vhls.smil/chunklist.m3u8', fallbackUrl: 'https://freem3u.xyz/api/live/play.m3u8?vid=10' },
+	    { name: 'HTVC Phụ nữ', logoImg: 'https://static.wikia.nocookie.net/logos/images/5/56/HTVC_Ph%E1%BB%A5_n%E1%BB%AF_logo.png/revision/latest?cb=20210625041807&path-prefix=vi', url: 'https://live.fptplay53.net/epzhd1/htvcphunu_vhls.smil/chunklist.m3u8', fallbackUrl: 'https://freem3u.xyz/api/live/play.m3u8?vid=10' },
+	    { name: 'HTVC Plus', logoImg: 'https://static.wikia.nocookie.net/logos/images/e/e1/HTVC%2B_logo.png/revision/latest?cb=20231112023356&path-prefix=vi', url: 'https://live.fptplay53.net/epzhd1/htvcplus_vhls.smil/chunklist.m3u8', fallbackUrl: 'https://freem3u.xyz/api/live/play.m3u8?vid=10' },
+	    { name: 'HTV Thuần Việt', logoImg: 'https://upload.wikimedia.org/wikipedia/vi/8/8c/HTVC_thuanviet.png?utm_source=vi.wikipedia.org&utm_campaign=index&utm_content=original', url: 'https://live.fptplay53.net/epzhd1/htvcthuanviethd_vhls.smil/chunklist.m3u8', fallbackUrl: 'https://freem3u.xyz/api/live/play.m3u8?vid=10' },
+            { name: 'AVT1', logoImg: 'https://static.wikia.nocookie.net/logos/images/8/81/ATV1_logo_09-07-2025.png/revision/latest?cb=20251109111844&path-prefix=vi', url: 'https://live.fptplay53.net/epzsd1/angiang01_hls.smil/chunklist.m3u8', fallbackUrl: 'https://freem3u.xyz/api/live/play.m3u8?vid=10' },
+	    { name: 'AVT2', logoImg: 'https://static.wikia.nocookie.net/logos/images/9/9a/ATV2_logo.png/revision/latest/scale-to-width-down/2000?cb=20251109112107&path-prefix=vi', url: 'https://live.fptplay53.net/epzsd1/angiang_hls.smil/chunklist.m3u8', fallbackUrl: 'https://freem3u.xyz/api/live/play.m3u8?vid=10' },
+	    { name: 'AVT3', logoImg: 'https://static.wikia.nocookie.net/logos/images/9/9f/ATV3_logo_09-07-2025.png/revision/latest/scale-to-width-down/250?cb=20251109111209&path-prefix=vi', url: 'https://live.fptplay53.net/epzsd1/angiang03_hls.smil/chunklist.m3u8', fallbackUrl: 'https://freem3u.xyz/api/live/play.m3u8?vid=10' },
+	    { name: 'Bắc Ninh BTV', logoImg: 'https://static.wikia.nocookie.net/logos/images/c/c8/BTV_Bac_Ninh_logo_2025.png/revision/latest/scale-to-width-down/600?cb=20250725122625&path-prefix=vi', url: 'https://live.mediatech.vn/live/285f5f227e988ab4445a2138091d3d62e8d/playlist.m3u8', fallbackUrl: 'https://1011154949.vnns.net/CDN-FPT02/THVL2-HD-1080p/playlist.m3u8' },
+            { name: 'SCTV9', logoImg: 'https://i.imgur.com/OJMbhow.png', url: 'https://vtvgolive-sctvdrm.vtvdigital.vn/manifest/sctv9/master.m3u8' },
+            { name: 'QPVN HD', logoImg: 'https://static.wikia.nocookie.net/logos/images/4/4e/QPVN_2013.png/revision/latest/scale-to-width-down/1200?cb=20220121034022&path-prefix=vi', url: 'https://liveh12.vtvprime.vn/hls/QPTV/index.m3u8', fallbackUrl: 'https://qpvn.vn/live/qpvn/master.m3u8' }
+        ];
+
+        let allChannels = [];
+        let filteredChannels = [];
+        let currentIndex = 0;
+        let hls = null;
+        let osdTimeout = null;
+        let isPlayerActive = false;
+        let lastWheelTime = 0;
+
+        window.handleImgError = function(imgElement, initialChar) {
+            const div = document.createElement('div');
+            div.className = 'w-16 h-16 rounded-2xl bg-gradient-to-tr from-blue-600 to-indigo-600 text-white font-black flex items-center justify-center text-xl shadow-lg border border-white/20';
+            div.innerText = initialChar;
+            imgElement.replaceWith(div);
+        };
+
+        window.onload = function() {
+            updateClock();
+            setInterval(updateClock, 1000);
+            loadLocalChannels();
+            setupMouseWheelSurfing();
+            setupTouchSurfing();
+            setupMediaFeatures();
+        };
+
+        function updateClock() {
+            const clockEl = document.getElementById('clock');
+            if (!clockEl) return;
+            const now = new Date();
+            clockEl.innerText = now.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
+        }
+
+        // Tải danh sách trực tiếp từ PRESET_VN_CHANNELS hoặc channels.json cục bộ
+	async function loadLocalChannels() {
+            try {
+                // Ưu tiên gọi file channels.json của bạn
+                const response = await fetch('channels.json');
+                if (!response.ok) throw new Error('Không tìm thấy file channels.json');
+                
+                const data = await response.json();
+                allChannels = data.map((ch, idx) => ({
+                    id: 'ch_' + idx,
+                    ...ch
+                }));
+            } catch (error) {
+                console.warn('Lỗi tải channels.json, chuyển sang danh sách dự phòng:', error);
+                // Nếu không có file hoặc file lỗi, dùng tạm PRESET_VN_CHANNELS
+                allChannels = PRESET_VN_CHANNELS.map((ch, idx) => ({
+                    id: 'ch_' + idx,
+                    ...ch
+                }));
+            }
+
+            filteredChannels = [...allChannels];
+            const countEl = document.getElementById('total-channels-count');
+            if (countEl) countEl.innerText = allChannels.length;
+            
+            renderGrid(filteredChannels);
+        }
+
+        let gridLimit = 50;
+        function renderGrid(channels, append = false) {
+            const gridContainer = document.getElementById('channels-grid');
+            if (!append) {
+                gridContainer.innerHTML = '';
+                gridLimit = 50;
+            }
+
+            if (channels.length === 0) {
+                if (!append) gridContainer.innerHTML = `<div class="col-span-full text-center py-20 text-gray-400">Không tìm thấy kênh phù hợp.</div>`;
+                return;
+            }
+
+            const channelsToRender = channels.slice(append ? gridLimit - 50 : 0, gridLimit);
+            let html = '';
+            channelsToRender.forEach((ch) => {
+                const initial = ch.name ? ch.name.charAt(0) : 'T';
+                const logoMarkup = ch.logoImg 
+                    ? `<img src="${ch.logoImg}" class="max-h-24 max-w-[85%] w-auto h-auto object-contain drop-shadow-xl transition-transform duration-300 group-hover:scale-110 p-1" onerror="handleImgError(this, '${initial}')">`
+                    : `<div class="w-16 h-16 md:w-20 md:h-20 rounded-2xl bg-gradient-to-br from-blue-600/30 to-purple-600/30 border border-white/10 text-white font-black flex items-center justify-center text-xl md:text-2xl shadow-xl transition-transform duration-300 group-hover:scale-110">${initial}</div>`;
+
+                html += `
+                    <div onclick="playChannelByIndex(${allChannels.indexOf(ch)})" 
+                         class="group relative aspect-[16/10] bg-[#1e1e1e] rounded-2xl overflow-hidden cursor-pointer transition-all duration-300 transform md:hover:scale-105 hover:z-10 focus-visible:scale-105 shadow-xl md:hover:shadow-2xl hover:border-blue-500/50 flex flex-col items-center justify-center p-3 md:p-5 active:scale-95">
+                        <div class="absolute inset-0 bg-gradient-to-t from-black/95 via-black/30 to-transparent opacity-10 md:opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+                        <div class="z-10 flex flex-col items-center justify-center w-full h-full transform transition-transform duration-300 md:group-hover:-translate-y-2">
+                            ${logoMarkup}
+                        </div>
+                        <h3 class="absolute bottom-2 md:bottom-3 left-2 right-2 text-center font-bold text-[10px] md:text-sm text-white md:opacity-0 group-hover:opacity-100 transition-opacity duration-300 line-clamp-1 shadow-black drop-shadow-md z-10">${ch.name}</h3>
+                    </div>
+                `;
+            });
+
+            if (append) {
+                gridContainer.insertAdjacentHTML('beforeend', html);
+            } else {
+                gridContainer.innerHTML = html;
+            }
+
+            if (gridLimit < channels.length) {
+                gridContainer.insertAdjacentHTML('beforeend', `<div id="load-more-trigger" class="col-span-full h-10 w-full"></div>`);
+                setupIntersectionObserver();
+            }
+        }
+
+        function setupIntersectionObserver() {
+            const trigger = document.getElementById('load-more-trigger');
+            if (!trigger) return;
+            
+            const observer = new IntersectionObserver((entries) => {
+                if (entries[0].isIntersecting) {
+                    observer.disconnect();
+                    trigger.remove();
+                    gridLimit += 50;
+                    renderGrid(filteredChannels, true);
+                }
+            }, { rootMargin: '400px' });
+            
+            observer.observe(trigger);
+        }
+
+        function filterChannels(keyword) {
+            const term = keyword.toLowerCase();
+            filteredChannels = allChannels.filter(ch => ch.name.toLowerCase().includes(term));
+            renderGrid(filteredChannels);
+        }
+
+        function playChannelByIndex(index) {
+            if (index < 0 || index >= allChannels.length) return;
+            currentIndex = index;
+            isPlayerActive = true;
+
+            const ch = allChannels[currentIndex];
+            document.getElementById('grid-view').classList.add('hidden');
+            document.getElementById('player-view').classList.remove('hidden');
+
+            loadStream(ch);
+            updateOSDContent(currentIndex);
+            showOSD();
+	    setTimeout(() => { triggerFullscreen(); }, 300);
+        }
+
+        function loadStream(channel, useFallback = false) {
+            const video = document.getElementById('video-player');
+            const loading = document.getElementById('video-loading');
+            const toast = document.getElementById('fallback-toast');
+            
+            loading.classList.remove('opacity-0');
+            toast.classList.add('hidden');
+
+            const targetUrl = (useFallback && channel.fallbackUrl) ? channel.fallbackUrl : channel.url;
+
+            const airplayChannelName = document.getElementById('airplay-channel-name');
+            if (airplayChannelName) airplayChannelName.innerText = channel.name;
+
+            if (hls) {
+                hls.destroy();
+                hls = null;
+            }
+
+            const isAppleSafari = /Safari|iPhone|iPad|iPod|Macintosh/i.test(navigator.userAgent) && !/Chrome|Android|Edg/i.test(navigator.userAgent);
+            const canPlayNativeHls = video.canPlayType('application/vnd.apple.mpegurl');
+
+            if ((isAppleSafari || !Hls.isSupported()) && canPlayNativeHls) {
+                video.src = targetUrl;
+                const onLoadedMetadata = () => {
+                    video.play().catch(e => console.log("Auto-play blocked", e));
+                    loading.classList.add('opacity-0');
+                    video.removeEventListener('loadedmetadata', onLoadedMetadata);
+                };
+                video.addEventListener('loadedmetadata', onLoadedMetadata);
+                video.onerror = () => {
+                    if (!useFallback && channel.fallbackUrl) {
+                        loadStream(channel, true);
+                    } else {
+                        toast.classList.remove('hidden');
+                        loadFallbackStream();
+                    }
+                };
+            } else if (Hls.isSupported()) {
+                hls = new Hls({
+                    maxBufferLength: 30,
+                    liveSyncDurationCount: 3
+                });
+                hls.loadSource(targetUrl);
+                hls.attachMedia(video);
+                hls.on(Hls.Events.MANIFEST_PARSED, () => {
+                    video.play().catch(e => console.log("Auto-play blocked", e));
+                    loading.classList.add('opacity-0');
+                });
+                hls.on(Hls.Events.ERROR, (event, data) => {
+                    if (data.fatal) {
+                        if (!useFallback && channel.fallbackUrl) {
+                            loadStream(channel, true);
+                        } else {
+                            toast.classList.remove('hidden');
+                            loadFallbackStream();
+                        }
+                    }
+                });
+            } else if (canPlayNativeHls) {
+                video.src = targetUrl;
+                video.play().catch(e => console.log(e));
+                loading.classList.add('opacity-0');
+            } else {
+                loadFallbackStream();
+            }
+        }
+
+        function loadFallbackStream() {
+            const video = document.getElementById('video-player');
+            const loading = document.getElementById('video-loading');
+            video.src = 'https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8';
+            video.play().catch(e => console.log(e));
+            loading.classList.add('opacity-0');
+        }
+
+        function updateOSDContent(currentIndex) {
+            const prevIndex = (currentIndex - 1 + allChannels.length) % allChannels.length;
+            const nextIndex = (currentIndex + 1) % allChannels.length;
+
+            const prevCh = allChannels[prevIndex];
+            const currCh = allChannels[currentIndex];
+            const nextCh = allChannels[nextIndex];
+
+            document.getElementById('osd-prev').innerText = prevCh.name;
+            document.getElementById('osd-channel-name').innerText = currCh.name;
+            document.getElementById('osd-next').innerText = nextCh.name;
+
+            renderOSDLogo('osd-prev-logo-container', prevCh);
+            renderOSDLogo('osd-current-logo-container', currCh);
+            renderOSDLogo('osd-next-logo-container', nextCh);
+        }
+
+        function renderOSDLogo(containerId, channel) {
+            const container = document.getElementById(containerId);
+            if (!container) return;
+            const initial = channel.name ? channel.name.charAt(0) : 'T';
+            
+            if (channel.logoImg) {
+                container.innerHTML = `<img src="${channel.logoImg}" class="w-full h-full object-contain p-1" onerror="handleImgError(this, '${initial}')">`;
+            } else {
+                container.innerHTML = `<span class="font-black text-white text-xs">${initial}</span>`;
+            }
+        }
+
+        // Hiển thị OSD Overlay hoàn toàn kèm bật tương tác (bỏ pointer-events-none)
+        function showOSD() {
+            const osd = document.getElementById('osd');
+            osd.classList.remove('opacity-0', 'pointer-events-none');
+            osd.classList.add('opacity-100');
+            
+            if (osdTimeout) clearTimeout(osdTimeout);
+            osdTimeout = setTimeout(() => {
+                // Ẩn hoàn toàn và khóa tương tác các nút bên trong
+                osd.classList.add('opacity-0', 'pointer-events-none');
+                osd.classList.remove('opacity-100');
+            }, 3500);
+        }
+
+        let touchStartX = 0;
+        let touchStartY = 0;
+        let touchEndX = 0;
+        let touchEndY = 0;
+
+        function setupTouchSurfing() {
+            const playerView = document.getElementById('player-view');
+            playerView.addEventListener('touchstart', e => {
+                if (!isPlayerActive || isVerticalMenuOpen || e.target.closest('#vertical-menu') || e.target.closest('button')) return;
+                touchStartX = e.changedTouches[0].screenX;
+                touchStartY = e.changedTouches[0].screenY;
+            }, {passive: true});
+
+            playerView.addEventListener('touchend', e => {
+                if (!isPlayerActive || isVerticalMenuOpen || e.target.closest('#vertical-menu') || e.target.closest('button')) return;
+                touchEndX = e.changedTouches[0].screenX;
+                touchEndY = e.changedTouches[0].screenY;
+                handleSwipe();
+            }, {passive: true});
+        }
+
+        function handleSwipe() {
+            const deltaX = touchEndX - touchStartX;
+            const deltaY = touchEndY - touchStartY;
+            
+            if (Math.abs(deltaX) < 50 && Math.abs(deltaY) < 50) return;
+
+            if (Math.abs(deltaX) > Math.abs(deltaY)) {
+                if (deltaX > 0) {
+                    changeChannel('prev');
+                } else {
+                    changeChannel('next');
+                }
+            } else {
+                if (deltaY > 0) {
+                    changeChannel('prev');
+                } else {
+                    changeChannel('next');
+                }
+            }
+        }
+
+        function changeChannel(dir) {
+            if (dir === 'next') {
+                currentIndex = (currentIndex + 1) % allChannels.length;
+            } else {
+                currentIndex = (currentIndex - 1 + allChannels.length) % allChannels.length;
+            }
+            loadStream(allChannels[currentIndex]);
+            updateOSDContent(currentIndex);
+            showOSD();
+        }
+
+        function setupMouseWheelSurfing() {
+            window.addEventListener('wheel', (e) => {
+                if (!isPlayerActive || isVerticalMenuOpen) return;
+                const now = Date.now();
+                if (now - lastWheelTime < 200) return;
+                lastWheelTime = now;
+
+                if (e.deltaY > 0) {
+                    changeChannel('next');
+                } else {
+                    changeChannel('prev');
+                }
+            }, { passive: true });
+
+            window.addEventListener('keydown', (e) => {
+                if (!isPlayerActive) return;
+                if (e.key === 'ArrowDown' || e.key === 'ArrowRight') {
+                    changeChannel('next');
+                } else if (e.key === 'ArrowUp' || e.key === 'ArrowLeft') {
+                    changeChannel('prev');
+                } else if (e.key === 'Escape') {
+                    if (isVerticalMenuOpen) {
+                        toggleVerticalMenu();
+                    } else {
+                        closePlayer();
+                    }
+                } else if (e.key === 'm' || e.key === 'M') {
+                    toggleVerticalMenu();
+                }
+            });
+        }
+
+	function closePlayer() {
+    isPlayerActive = false;
+
+    // 1. Ẩn trình phát và hiện lại màn hình chính
+    document.getElementById('player-view').classList.add('hidden');
+    document.getElementById('grid-view').classList.remove('hidden');
+
+    // 2. XỬ LÝ TRIỆT ĐỂ: Dừng video và cắt đứt hoàn toàn nguồn phát để ngắt tiếng
+    const video = document.getElementById('video-player');
+    if (video) {
+        video.pause();           // Tạm dừng phát
+        video.currentTime = 0;   // Đưa thời gian về 0
+        video.src = "";          // Xóa sạch nguồn stream đang chạy ngầm
+        video.load();            // Buộc trình duyệt giải phóng bộ nhớ đệm của video
+    }
+
+    // 3. Thoát chế độ toàn màn hình của trình duyệt
+    if (document.fullscreenElement || document.webkitFullscreenElement) {
+        if (document.exitFullscreen) {
+            document.exitFullscreen();
+        } else if (document.webkitExitFullscreen) {
+            document.webkitExitFullscreen();
+        }
+    }
+
+    // 4. Mở khóa lại thanh cuộn và tương tác cho trang chủ
+    document.body.style.overflow = 'auto'; 
+    
+    // Ẩn OSD và Menu nếu còn mở
+    const osdContainer = document.getElementById('player-osd-container');
+    if (osdContainer) osdContainer.classList.remove('active');
+    
+    if (typeof isVerticalMenuOpen !== 'undefined' && isVerticalMenuOpen) {
+        toggleVerticalMenu();
+    }
+    if (typeof hls !== 'undefined' && hls) {
+    hls.destroy(); // Hủy hẳn tiến trình stream của Hls.js
+}
+}
+
+        let isVerticalMenuOpen = false;
+        let verticalMenuTimer = null;
+        let verticalLimit = 100;
+        let currentVerticalList = [];
+
+        function toggleVerticalMenu() {
+            const menu = document.getElementById('vertical-menu');
+            if (!menu) return;
+
+            if (verticalMenuTimer) {
+                clearTimeout(verticalMenuTimer);
+                verticalMenuTimer = null;
+            }
+
+            if (isVerticalMenuOpen) {
+                menu.classList.add('translate-x-full');
+                isVerticalMenuOpen = false;
+                showOSD();
+            } else {
+                document.getElementById('vertical-search').value = '';
+                currentVerticalList = allChannels;
+                renderVerticalMenu(currentVerticalList, true);
+                menu.classList.remove('translate-x-full');
+                isVerticalMenuOpen = true;
+
+                setTimeout(() => {
+                    const activeEl = document.getElementById(`vch_${currentIndex}`);
+                    if (activeEl) {
+                        activeEl.scrollIntoView({ block: 'center', behavior: 'smooth' });
+                    }
+                }, 150);
+            }
+        }
+
+        function renderVerticalMenu(channelsList, reset = true) {
+            const listContainer = document.getElementById('vertical-menu-list');
+            if (reset) {
+                verticalLimit = 100;
+                if (channelsList === allChannels && currentIndex >= verticalLimit) {
+                    verticalLimit = currentIndex + 20;
+                }
+            }
+
+            if(channelsList.length === 0) {
+                listContainer.innerHTML = '<div class="text-center text-sm text-gray-500 mt-10">Không tìm thấy kênh</div>';
+                return;
+            }
+            
+            const toRender = channelsList.slice(0, verticalLimit);
+            let html = '';
+            toRender.forEach((ch) => {
+                const globalIdx = allChannels.indexOf(ch);
+                const isActive = (globalIdx === currentIndex);
+                const initial = ch.name ? ch.name.charAt(0) : 'T';
+                const activeClasses = isActive 
+                    ? 'bg-blue-600/30 border-blue-500/80 ring-2 ring-blue-500/50 shadow-lg shadow-blue-500/20' 
+                    : 'bg-white/5 border-white/5 md:hover:bg-white/10 md:hover:border-white/20';
+                
+                html += `
+                    <div id="vch_${globalIdx}" onclick="selectChannelFromVertical(${globalIdx})" class="group flex items-center gap-3 p-3 rounded-xl cursor-pointer transition-all border ${activeClasses} active:scale-95">
+                        <div class="w-12 h-12 md:w-14 md:h-14 rounded-lg bg-black/50 flex items-center justify-center shrink-0 overflow-hidden shadow-inner border border-white/10">
+                            ${ch.logoImg ? `<img src="${ch.logoImg}" class="w-full h-full object-contain p-1 drop-shadow-md" onerror="handleImgError(this, '${initial}')">` : `<span class="font-bold text-sm text-white/70">${initial}</span>`}
+                        </div>
+                        <div class="flex flex-col flex-1 truncate">
+                            <span class="text-[13px] md:text-[14px] font-medium truncate md:group-hover:text-white ${isActive ? 'text-white font-bold' : 'text-gray-300'}">${ch.name}</span>
+                            ${isActive ? '<span class="text-[10px] text-blue-400 font-extrabold uppercase tracking-wider mt-1 flex items-center gap-1.5"><i class="fa-solid fa-play text-[8px] animate-pulse"></i> Đang phát</span>' : '<span class="text-[10px] text-gray-500 md:group-hover:text-gray-400 mt-0.5">IPTV</span>'}
+                        </div>
+                    </div>
+                `;
+            });
+            
+            listContainer.innerHTML = html;
+            
+            if (verticalLimit < channelsList.length) {
+                listContainer.insertAdjacentHTML('beforeend', `<button class="w-full py-4 text-xs font-medium text-blue-400 bg-white/5 rounded-xl mt-2 active:bg-white/10" onclick="loadMoreVertical()">Tải thêm...</button>`);
+            }
+        }
+
+        function loadMoreVertical() {
+            verticalLimit += 100;
+            renderVerticalMenu(currentVerticalList, false);
+        }
+
+        function filterVerticalChannels(keyword) {
+            const term = keyword.toLowerCase();
+            currentVerticalList = allChannels.filter(ch => ch.name.toLowerCase().includes(term));
+            renderVerticalMenu(currentVerticalList, true);
+        }
+
+        function selectChannelFromVertical(idx) {
+            playChannelByIndex(idx);
+            renderVerticalMenu(currentVerticalList, false);
+
+            if (verticalMenuTimer) clearTimeout(verticalMenuTimer);
+            verticalMenuTimer = setTimeout(() => {
+                if (isVerticalMenuOpen) {
+                    toggleVerticalMenu();
+                }
+            }, 5000);
+        }
+
+        function setupMediaFeatures() {
+            const video = document.getElementById('video-player');
+            const airplayBtn = document.getElementById('airplay-btn');
+            const pipBtn = document.getElementById('pip-btn');
+
+            video.disableRemotePlayback = false;
+            if ('webkitAllowsAirPlay' in video) {
+                video.webkitAllowsAirPlay = true;
+            }
+
+            if (window.WebKitPlaybackTargetAvailabilityEvent) {
+                video.addEventListener('webkitplaybacktargetavailabilitychanged', function(event) {
+                    if (event.availability === "available") {
+                        airplayBtn.classList.remove('hidden');
+                    } else {
+                        airplayBtn.classList.add('hidden');
+                    }
+                });
+            } else if (video.webkitShowPlaybackTargetPicker) {
+                airplayBtn.classList.remove('hidden');
+            }
+
+            video.addEventListener('webkitcurrentplaybacktargetiswirelesschanged', function() {
+                const isWireless = video.webkitCurrentPlaybackTargetIsWireless;
+                updateAirPlayOverlayUI(isWireless);
+            });
+
+            if (video.remote) {
+                video.remote.addEventListener('connect', () => updateAirPlayOverlayUI(true));
+                video.remote.addEventListener('disconnect', () => updateAirPlayOverlayUI(false));
+            }
+
+            if (document.pictureInPictureEnabled || video.webkitSupportsPresentationMode) {
+                pipBtn.classList.remove('hidden');
+            }
+        }
+
+        function updateAirPlayOverlayUI(isConnected) {
+            const overlay = document.getElementById('airplay-overlay');
+            const airplayBtn = document.getElementById('airplay-btn');
+            const channelName = document.getElementById('airplay-channel-name');
+            
+            if (isConnected) {
+                if (allChannels[currentIndex]) {
+                    channelName.innerText = allChannels[currentIndex].name;
+                }
+                overlay.classList.remove('hidden');
+                if (airplayBtn) {
+                    airplayBtn.classList.add('bg-blue-600', 'text-white');
+                    airplayBtn.classList.remove('bg-white/10');
+                }
+            } else {
+                overlay.classList.add('hidden');
+                if (airplayBtn) {
+                    airplayBtn.classList.remove('bg-blue-600');
+                    airplayBtn.classList.add('bg-white/10');
+                }
+            }
+        }
+
+        function triggerAirPlay() {
+            const video = document.getElementById('video-player');
+            if (video.webkitShowPlaybackTargetPicker) {
+                video.webkitShowPlaybackTargetPicker();
+            } else if (video.remote && typeof video.remote.prompt === 'function') {
+                video.remote.prompt().catch(e => console.log("AirPlay prompt error", e));
+            }
+        }
+
+        let clickTimer = null;
+        function handlePlayerClick(e) {
+            if (e.target.closest('#vertical-menu') || e.target.closest('#osd') || e.target.closest('button')) return;
+            if (clickTimer === null) {
+                clickTimer = setTimeout(() => {
+                    clickTimer = null;
+                    showOSD();
+                }, 250);
+            } else {
+                clearTimeout(clickTimer);
+                clickTimer = null;
+                triggerFullscreen();
+            }
+        }
+
+	function triggerFullscreen() {
+            // Thay vì gọi fullscreen vào thẻ video, ta gọi vào cả khung player-view chứa cả video lẫn OSD/Menu
+            const playerView = document.getElementById('player-view');
+            if (!playerView) return;
+
+            if (playerView.requestFullscreen) {
+                playerView.requestFullscreen();
+            } else if (playerView.webkitRequestFullscreen) {
+                playerView.webkitRequestFullscreen(); // Hỗ trợ Safari/iOS
+            } else if (playerView.msRequestFullscreen) {
+                playerView.msRequestFullscreen();
+            } else {
+                // Fallback nếu trình duyệt không cho phép phóng to khung, ép thới thẻ video
+                const video = document.getElementById('video-player');
+                if (video.webkitEnterFullscreen) {
+                    video.webkitEnterFullscreen();
+                }
+            }
+        }
+
+        async function triggerPiP() {
+            const video = document.getElementById('video-player');
+            try {
+                if (video.webkitSupportsPresentationMode && typeof video.webkitSetPresentationMode === "function") {
+                    video.webkitSetPresentationMode(video.webkitPresentationMode === "picture-in-picture" ? "inline" : "picture-in-picture");
+                } else if (document.pictureInPictureElement) {
+                    await document.exitPictureInPicture();
+                } else if (document.pictureInPictureEnabled) {
+                    await video.requestPictureInPicture();
+                }
+            } catch (error) {
+                console.error("Lỗi khi mở Picture-in-Picture:", error);
+            }
+        }
+    </script>
+</body>
+</html>
