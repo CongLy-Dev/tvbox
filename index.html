@@ -340,33 +340,18 @@
             clockEl.innerText = now.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
         }
 
-        // Tải danh sách trực tiếp từ PRESET_VN_CHANNELS hoặc channels.json cục bộ
-	async function loadLocalChannels() {
-            try {
-                // Ưu tiên gọi file channels.json của bạn
-                const response = await fetch('channels.json');
-                if (!response.ok) throw new Error('Không tìm thấy file channels.json');
-                
-                const data = await response.json();
-                allChannels = data.map((ch, idx) => ({
-                    id: 'ch_' + idx,
-                    ...ch
-                }));
-            } catch (error) {
-                console.warn('Lỗi tải channels.json, chuyển sang danh sách dự phòng:', error);
-                // Nếu không có file hoặc file lỗi, dùng tạm PRESET_VN_CHANNELS
-                allChannels = PRESET_VN_CHANNELS.map((ch, idx) => ({
-                    id: 'ch_' + idx,
-                    ...ch
-                }));
-            }
+function loadLocalChannels() {
+    allChannels = PRESET_VN_CHANNELS.map((ch, idx) => ({
+        id: 'ch_' + idx,
+        ...ch
+    }));
 
-            filteredChannels = [...allChannels];
-            const countEl = document.getElementById('total-channels-count');
-            if (countEl) countEl.innerText = allChannels.length;
-            
-            renderGrid(filteredChannels);
-        }
+    filteredChannels = [...allChannels];
+    const countEl = document.getElementById('total-channels-count');
+    if (countEl) countEl.innerText = allChannels.length;
+    
+    renderGrid(filteredChannels);
+}
 
         let gridLimit = 50;
         function renderGrid(channels, append = false) {
