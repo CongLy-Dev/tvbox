@@ -522,7 +522,6 @@ function loadLocalChannels() {
         function loadFallbackStream() {
             const video = document.getElementById('video-player');
             const loading = document.getElementById('video-loading');
-            video.src = 'https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8';
             video.play().catch(e => console.log(e));
             loading.classList.add('opacity-0');
         }
